@@ -4,6 +4,13 @@ import math
 import os
 import json
 
+'''
+需要修改的参数：
+1. 棋盘格每个格子的大小
+2. 棋盘格原点的机床坐标系坐标
+3. 棋盘格中的每一个点的机床坐标系是否标注正确（加减看好）
+4. 读取棋盘格照片
+'''
 
 def load_para(json_path):
     assert os.path.exists(json_path), json_path + " does not exist."
@@ -16,14 +23,29 @@ para = load_para("camera_intr_opt.json")
 
 mtx, dist = np.array(para["mtx"]), np.array(para["dist"])
 
-# 3D 真实世界坐标系的点（单位 mm, 确保单位一致）
-square_size = 24.375  # 24.375mm 每格
-objp = np.zeros((9 * 6, 3), np.float32)
-objp[:, :2] = np.mgrid[0:9, 0:6].T.reshape(-1, 2) * square_size  # 计算棋盘格点的 3D 坐标
-obj_points = objp  # 存储3D点
+# 棋盘格参数
+square_size = 24.375  # 每格大小，单位 mm
+pattern_size = (9, 6)  # 棋盘格角点数目（列数, 行数）
+
+# 棋盘格原点的机床坐标系坐标
+origin_x = -387.884
+origin_y = -340.868
+
+# 生成新的 objp
+objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
+
+# 遍历棋盘格中的每一个点
+for i in range(pattern_size[1]):      # y方向（行）
+    for j in range(pattern_size[0]):  # x方向（列）
+        index = i * pattern_size[0] + j
+        objp[index, 0] = origin_x - j * square_size  # x坐标
+        objp[index, 1] = origin_y + i * square_size  # y坐标
+        objp[index, 2] = 0                           # z坐标
+
+obj_points = objp
 
 # 读取棋盘格照片
-img = cv2.imread("./test.jpg")
+img = cv2.imread("/home/knd/铣床实验照片/2025_04_25/2025_04_25_13h_35m_29s.jpeg")
 if img is None:
     print("无法读取图片，请检查文件路径！")
     exit()
@@ -42,6 +64,9 @@ if ret:
     # 解算位姿（求解旋转向量和平移向量）
     _, rvec, tvec = cv2.solvePnP(obj_points, img_points, mtx, dist)
 
+    print(rvec)
+    print(tvec)
+
     # 计算距离（单位 cm）
     distance = math.sqrt(tvec[0] ** 2 + tvec[1] ** 2 + tvec[2] ** 2) / 10.0
 
@@ -57,7 +82,10 @@ if ret:
 
     # 在图像上绘制距离 & 角度信息
     cv2.putText(img, "dist: %.2fcm, yaw: %.2f, pitch: %.2f, roll: %.2f" % (distance, yaw, pitch, roll),
-                (10, 500), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                (10,  img.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+    # 保存处理后的图像
+    cv2.imwrite("chessboard_result.jpg", img)
 
     # 显示结果
     cv2.imshow('Chessboard Detection', img)
